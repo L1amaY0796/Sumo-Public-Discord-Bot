@@ -56,8 +56,8 @@ def translate_division(division_en: Optional[str]) -> str:
     return DIVISION_ZH.get(division_en, division_en)
 
 # ---------- 錯誤訊息共用文字 ----------
-GITHUB_REPO_URL = "（GitHub repo 連結待補）"
-SUPPORT_EMAIL = "（聯絡信箱待補）"
+GITHUB_REPO_URL = "https://github.com/L1amaY0796/Sumo-Public-Discord-Bot"
+SUPPORT_EMAIL = "llamayong96@gmail.com"
 
 SUPPORT_CONTACT_MESSAGE = (
     f"如果問題持續發生，歡迎到 GitHub 回報：{GITHUB_REPO_URL}\n"
