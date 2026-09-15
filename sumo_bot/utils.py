@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import date, datetime
 from typing import Optional
 BASHO_MONTHS = [1, 3, 5, 7, 9, 11]
@@ -63,6 +64,13 @@ def parse_rank_string(rank_en: Optional[str]) -> tuple[str, str]:
     division = parts[0] if parts else ''
     number = parts[1] if len(parts) > 1 and parts[1].isdigit() else ''
     return (division, number)
+
+def display_width(s: str) -> int:
+    """等寬字型下的顯示寬度：全形/中日文字算 2，其餘算 1（用來對齊 code block 表格）。"""
+    return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
+
+def pad_display(s: str, width: int) -> str:
+    return s + ' ' * max(0, width - display_width(s))
 
 # ---------- 錯誤訊息共用文字 ----------
 GITHUB_REPO_URL = "https://github.com/L1amaY0796/Sumo-Public-Discord-Bot"

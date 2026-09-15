@@ -1,8 +1,9 @@
 import discord
 from typing import Optional
-from utils import calc_age, basho_display_name, translate_rank, translate_division, parse_rank_string, DIVISION_ZH
+from utils import calc_age, basho_display_name, translate_rank, translate_division, parse_rank_string, DIVISION_ZH, display_width, pad_display
 BRAND_COLOR = discord.Color.from_rgb(180, 40, 40)
 NO_NUMBER_DIVISIONS = {'Yokozuna', 'Ozeki'}
+TABLE_FIELD_BUDGET = 1000  # 留一點空間給 ``` 圍欄
 
 def _display_name(rikishi: dict) -> str:
     en = rikishi.get('shikonaEn') or '?'
@@ -210,8 +211,43 @@ def _rank_label(entry: dict, with_side: bool=False) -> str:
     label = division_zh if (division in NO_NUMBER_DIVISIONS or not number) else f'{division_zh}{number}'
     if with_side:
         side_zh = '東' if entry.get('side') == 'East' else '西'
-        label += f'（{side_zh}）'
+        label += f'({side_zh})'
     return label
+
+def _short_display(entry: dict) -> str:
+    name_jp = entry.get('shikonaJp') or ''
+    name_en = entry.get('shikonaEn') or '?'
+    short_jp = name_jp.split('　')[0] or name_en
+    return f'{short_jp}({name_en})'
+
+def _chunk_table_into_fields(embed: discord.Embed, headers: list[str], rows: list[list[str]]) -> None:
+    """把表格切成幾塊 code block 塞進 embed fields，每塊都重複表頭方便閱讀。"""
+    col_widths = [display_width(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            col_widths[i] = max(col_widths[i], display_width(cell))
+
+    def row_text(cells: list[str]) -> str:
+        return '  '.join(pad_display(c, col_widths[i]) if i < len(cells) - 1 else c for i, c in enumerate(cells))
+
+    header_block = row_text(headers) + '\n' + '-' * (sum(col_widths) + 2 * (len(headers) - 1)) + '\n'
+    budget = TABLE_FIELD_BUDGET - len(header_block) - len('```\n\n```')
+
+    def emit(lines: list[str]) -> None:
+        embed.add_field(name='​', value=f'```\n{header_block}' + '\n'.join(lines) + '\n```', inline=False)
+
+    chunk: list[str] = []
+    chunk_len = 0
+    for row in rows:
+        line = row_text(row)
+        if chunk_len + len(line) + 1 > budget and chunk:
+            emit(chunk)
+            chunk = []
+            chunk_len = 0
+        chunk.append(line)
+        chunk_len += len(line) + 1
+    if chunk:
+        emit(chunk)
 
 def build_rank_embed(basho_id: str, banzuke: Optional[dict]) -> discord.Embed:
     embed = discord.Embed(title=f'📊 {basho_display_name(basho_id)} 幕內番付', color=BRAND_COLOR)
@@ -222,46 +258,8 @@ def build_rank_embed(basho_id: str, banzuke: Optional[dict]) -> discord.Embed:
     if not entries:
         embed.description = '這個場所目前沒有幕內番付資料。'
         return embed
-    lines = []
-    current_key = None
-    group: list[dict] = []
-
-    def flush_group():
-        if not group:
-            return
-        label = _rank_label(group[0])
-        names = []
-        for e in group:
-            side_zh = '東' if e.get('side') == 'East' else '西'
-            name_jp = e.get('shikonaJp')
-            name_en = e.get('shikonaEn') or '?'
-            display = f'{name_jp}（{name_en}）' if name_jp else name_en
-            names.append(f'{display}（{side_zh}）')
-        lines.append(f'**{label}**：' + '　'.join(names))
-
-    for e in entries:
-        key = e.get('rankValue')
-        if key != current_key and group:
-            flush_group()
-            group = []
-        current_key = key
-        group.append(e)
-    flush_group()
-    text = '\n'.join(lines)
-    if len(text) <= 4096:
-        embed.description = text
-    else:
-        chunk = []
-        length = 0
-        for line in lines:
-            if length + len(line) + 1 > 1024:
-                embed.add_field(name='​', value='\n'.join(chunk), inline=False)
-                chunk = []
-                length = 0
-            chunk.append(line)
-            length += len(line) + 1
-        if chunk:
-            embed.add_field(name='​', value='\n'.join(chunk), inline=False)
+    rows = [[_rank_label(e, with_side=True), _short_display(e)] for e in entries]
+    _chunk_table_into_fields(embed, ['番付', '姓氏(拼音)'], rows)
     embed.set_footer(text='資料來源：sumo-api.com')
     return embed
 
@@ -278,33 +276,14 @@ def build_leaderboard_embed(basho_id: str, banzuke: Optional[dict]) -> discord.E
         entries,
         key=lambda e: (-(e.get('wins') or 0), e.get('losses') or 0, e.get('rankValue') or 999),
     )
-    lines = []
-    rank_no = 0
-    prev_score = None
-    for i, e in enumerate(entries_sorted):
+    rows = []
+    for e in entries_sorted:
         wins = e.get('wins') or 0
         losses = e.get('losses') or 0
         absences = e.get('absences') or 0
-        score = (wins, losses)
-        if score != prev_score:
-            rank_no = i + 1
-            prev_score = score
-        name_jp = e.get('shikonaJp')
-        name_en = e.get('shikonaEn') or '?'
-        display = f'{name_jp}（{name_en}）' if name_jp else name_en
-        record = f'{wins}勝{losses}敗' + (f'{absences}休' if absences else '')
-        lines.append(f'{rank_no}. {display} — {record}（{_rank_label(e, with_side=True)}）')
-    chunk = []
-    length = 0
-    for line in lines:
-        if length + len(line) + 1 > 1024:
-            embed.add_field(name='​', value='\n'.join(chunk), inline=False)
-            chunk = []
-            length = 0
-        chunk.append(line)
-        length += len(line) + 1
-    if chunk:
-        embed.add_field(name='​', value='\n'.join(chunk), inline=False)
+        score = f'{wins}-{losses}' + (f'（{absences}休）' if absences else '')
+        rows.append([score, _short_display(e), _rank_label(e, with_side=True)])
+    _chunk_table_into_fields(embed, ['勝-敗', '姓氏(拼音)', '番付'], rows)
     embed.set_footer(text='資料來源：sumo-api.com（進行中的場所會即時反映目前戰況）')
     return embed
 
