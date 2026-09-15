@@ -1,7 +1,8 @@
 import discord
 from typing import Optional
-from utils import calc_age, basho_display_name, translate_rank, translate_division
+from utils import calc_age, basho_display_name, translate_rank, translate_division, parse_rank_string, DIVISION_ZH
 BRAND_COLOR = discord.Color.from_rgb(180, 40, 40)
+NO_NUMBER_DIVISIONS = {'Yokozuna', 'Ozeki'}
 
 def _display_name(rikishi: dict) -> str:
     en = rikishi.get('shikonaEn') or '?'
@@ -199,12 +200,122 @@ def build_basho_embed(basho_id: str, basho_data: dict, banzuke: Optional[dict]=N
     embed.set_footer(text='資料來源：sumo-api.com')
     return embed
 
+def _banzuke_entries(banzuke: dict) -> list[dict]:
+    entries = (banzuke.get('east') or []) + (banzuke.get('west') or [])
+    return sorted(entries, key=lambda e: (e.get('rankValue') or 999, 0 if e.get('side') == 'East' else 1))
+
+def _rank_label(entry: dict, with_side: bool=False) -> str:
+    division, number = parse_rank_string(entry.get('rank'))
+    division_zh = DIVISION_ZH.get(division, division or '?')
+    label = division_zh if (division in NO_NUMBER_DIVISIONS or not number) else f'{division_zh}{number}'
+    if with_side:
+        side_zh = '東' if entry.get('side') == 'East' else '西'
+        label += f'（{side_zh}）'
+    return label
+
+def build_rank_embed(basho_id: str, banzuke: Optional[dict]) -> discord.Embed:
+    embed = discord.Embed(title=f'📊 {basho_display_name(basho_id)} 幕內番付', color=BRAND_COLOR)
+    if not banzuke:
+        embed.description = '查不到這個場所的番付表（可能場所尚未公布番付，或資料庫尚未收錄）。'
+        return embed
+    entries = _banzuke_entries(banzuke)
+    if not entries:
+        embed.description = '這個場所目前沒有幕內番付資料。'
+        return embed
+    lines = []
+    current_key = None
+    group: list[dict] = []
+
+    def flush_group():
+        if not group:
+            return
+        label = _rank_label(group[0])
+        names = []
+        for e in group:
+            side_zh = '東' if e.get('side') == 'East' else '西'
+            name_jp = e.get('shikonaJp')
+            name_en = e.get('shikonaEn') or '?'
+            display = f'{name_jp}（{name_en}）' if name_jp else name_en
+            names.append(f'{display}（{side_zh}）')
+        lines.append(f'**{label}**：' + '　'.join(names))
+
+    for e in entries:
+        key = e.get('rankValue')
+        if key != current_key and group:
+            flush_group()
+            group = []
+        current_key = key
+        group.append(e)
+    flush_group()
+    text = '\n'.join(lines)
+    if len(text) <= 4096:
+        embed.description = text
+    else:
+        chunk = []
+        length = 0
+        for line in lines:
+            if length + len(line) + 1 > 1024:
+                embed.add_field(name='​', value='\n'.join(chunk), inline=False)
+                chunk = []
+                length = 0
+            chunk.append(line)
+            length += len(line) + 1
+        if chunk:
+            embed.add_field(name='​', value='\n'.join(chunk), inline=False)
+    embed.set_footer(text='資料來源：sumo-api.com')
+    return embed
+
+def build_leaderboard_embed(basho_id: str, banzuke: Optional[dict]) -> discord.Embed:
+    embed = discord.Embed(title=f'🔥 {basho_display_name(basho_id)} 幕內總戰績', color=BRAND_COLOR)
+    if not banzuke:
+        embed.description = '查不到這個場所的戰績資料（可能場所尚未開始，或資料庫尚未收錄）。'
+        return embed
+    entries = _banzuke_entries(banzuke)
+    if not entries:
+        embed.description = '這個場所目前沒有幕內力士戰績資料。'
+        return embed
+    entries_sorted = sorted(
+        entries,
+        key=lambda e: (-(e.get('wins') or 0), e.get('losses') or 0, e.get('rankValue') or 999),
+    )
+    lines = []
+    rank_no = 0
+    prev_score = None
+    for i, e in enumerate(entries_sorted):
+        wins = e.get('wins') or 0
+        losses = e.get('losses') or 0
+        absences = e.get('absences') or 0
+        score = (wins, losses)
+        if score != prev_score:
+            rank_no = i + 1
+            prev_score = score
+        name_jp = e.get('shikonaJp')
+        name_en = e.get('shikonaEn') or '?'
+        display = f'{name_jp}（{name_en}）' if name_jp else name_en
+        record = f'{wins}勝{losses}敗' + (f'{absences}休' if absences else '')
+        lines.append(f'{rank_no}. {display} — {record}（{_rank_label(e, with_side=True)}）')
+    chunk = []
+    length = 0
+    for line in lines:
+        if length + len(line) + 1 > 1024:
+            embed.add_field(name='​', value='\n'.join(chunk), inline=False)
+            chunk = []
+            length = 0
+        chunk.append(line)
+        length += len(line) + 1
+    if chunk:
+        embed.add_field(name='​', value='\n'.join(chunk), inline=False)
+    embed.set_footer(text='資料來源：sumo-api.com（進行中的場所會即時反映目前戰況）')
+    return embed
+
 def build_guide_embed() -> discord.Embed:
     embed = discord.Embed(title='📖 Sumo Bot 使用說明', description='查詢大相撲力士資料與場所結果，支援日文漢字、羅馬拼音、常見繁中翻譯名。', color=BRAND_COLOR)
     embed.add_field(name='🔍 /rikishi', value='查詢單一力士完整資料（年齡、出身、部屋、番付、身體數據、生涯戰績、優勝與三賞次數）\n`name`：力士名稱（必填）\n範例：`/rikishi name:Onosato`', inline=False)
     embed.add_field(name='🔍 /record', value='查詢力士單一場所的逐日戰績\n`name`：力士名稱（必填）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/record name:Hoshoryu basho:202607`', inline=False)
     embed.add_field(name='🔍 /h2h', value='查詢兩位力士的對戰紀錄與勝負統計\n`name1`、`name2`：兩位力士名稱（皆必填）\n範例：`/h2h name1:Aonishiki name2:Hoshoryu`', inline=False)
     embed.add_field(name='🔍 /basho', value='查詢場所結果（各級優勝、三賞）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/basho basho:202605`', inline=False)
+    embed.add_field(name='🔍 /rank', value='查詢該場所幕內力士當前位階（橫綱、大關⋯由高到低排列，含東西方）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/rank basho:202607`', inline=False)
+    embed.add_field(name='🔍 /leaderboard', value='查詢該場所幕內力士目前總戰績（W 勝 - L 敗），依勝場數排序\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/leaderboard basho:202607`', inline=False)
     embed.add_field(name='🗨️ 名稱查詢小技巧', value='支援大小寫不拘的力士羅馬拼音名，如有四股名同姓情形，建議使用全名。支援的日文漢字與繁中搜尋，如 Onosato 寫作`大の里`、`大之里`持續更新中，可查閱 Github 的 json 檔，如想完善也歡迎向作者反應。', inline=False)
     embed.add_field(name='🗨️ 感謝', value='若想支持，本機器人基於`sumo-api.com`的免費 api 運作，可以支持他們。', inline= False)
     embed.set_footer(text='資料來源：sumo-api.com')

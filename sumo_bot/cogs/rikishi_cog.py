@@ -111,6 +111,44 @@ class RikishiCog(commands.Cog):
         embed = embeds.build_basho_embed(basho_id, data, banzuke)
         await interaction.followup.send(embed=embed)
 
+    @app_commands.command(name='rank', description='查詢該場所幕內力士當前位階（橫綱、大關等由高到低排列）')
+    @app_commands.describe(basho='場所代碼，格式 YYYYMM，例如 202607（不填則自動抓目前或最近一次場所）')
+    async def rank(self, interaction: discord.Interaction, basho: str | None=None):
+        await interaction.response.defer()
+        basho_id = basho.strip() if basho else current_basho_id()
+        if not (basho_id.isdigit() and len(basho_id) == 6):
+            await interaction.followup.send('⚠️ 場所代碼格式錯誤，請用 YYYYMM，例如 202607（2026年七月場所）。')
+            return
+        try:
+            banzuke = await self.api.get_banzuke(basho_id, 'Makuuchi')
+        except SumoAPIError as e:
+            await interaction.followup.send(
+                f"⚠️ 查不到 {basho_display_name(basho_id)} 的番付表：{e}\n"
+                f"（有可能該場所番付尚未公布，或資料庫尚未收錄）\n{SUPPORT_CONTACT_MESSAGE}"
+            )
+            return
+        embed = embeds.build_rank_embed(basho_id, banzuke)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name='leaderboard', description='查詢該場所幕內力士目前總戰績（W-L），依勝場數排序')
+    @app_commands.describe(basho='場所代碼，格式 YYYYMM，例如 202607（不填則自動抓目前或最近一次場所）')
+    async def leaderboard(self, interaction: discord.Interaction, basho: str | None=None):
+        await interaction.response.defer()
+        basho_id = basho.strip() if basho else current_basho_id()
+        if not (basho_id.isdigit() and len(basho_id) == 6):
+            await interaction.followup.send('⚠️ 場所代碼格式錯誤，請用 YYYYMM，例如 202607（2026年七月場所）。')
+            return
+        try:
+            banzuke = await self.api.get_banzuke(basho_id, 'Makuuchi')
+        except SumoAPIError as e:
+            await interaction.followup.send(
+                f"⚠️ 查不到 {basho_display_name(basho_id)} 的戰績資料：{e}\n"
+                f"（有可能該場所尚未開始，或資料庫尚未收錄）\n{SUPPORT_CONTACT_MESSAGE}"
+            )
+            return
+        embed = embeds.build_leaderboard_embed(basho_id, banzuke)
+        await interaction.followup.send(embed=embed)
+
     @app_commands.command(name='guide', description='顯示所有指令的使用說明')
     async def guide(self, interaction: discord.Interaction):
         embed = embeds.build_guide_embed()

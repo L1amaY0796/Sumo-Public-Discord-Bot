@@ -55,6 +55,15 @@ def translate_division(division_en: Optional[str]) -> str:
         return '不明'
     return DIVISION_ZH.get(division_en, division_en)
 
+def parse_rank_string(rank_en: Optional[str]) -> tuple[str, str]:
+    """把類似 'Maegashira 12 East' 拆成 ('Maegashira', '12')，拆不出號碼則回傳空字串。"""
+    if not rank_en:
+        return ('', '')
+    parts = rank_en.split(' ')
+    division = parts[0] if parts else ''
+    number = parts[1] if len(parts) > 1 and parts[1].isdigit() else ''
+    return (division, number)
+
 # ---------- 錯誤訊息共用文字 ----------
 GITHUB_REPO_URL = "https://github.com/L1amaY0796/Sumo-Public-Discord-Bot"
 SUPPORT_EMAIL = "llamayong96@gmail.com"
