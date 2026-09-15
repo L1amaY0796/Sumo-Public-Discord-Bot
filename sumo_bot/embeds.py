@@ -282,8 +282,8 @@ def build_leaderboard_embed(basho_id: str, banzuke: Optional[dict]) -> discord.E
         losses = e.get('losses') or 0
         absences = e.get('absences') or 0
         score = f'{wins}-{losses}' + (f'（{absences}休）' if absences else '')
-        rows.append([score, _short_display(e), _rank_label(e, with_side=True)])
-    _chunk_table_into_fields(embed, ['勝-敗', '姓氏(拼音)', '番付'], rows)
+        rows.append([score, _rank_label(e, with_side=True), _short_display(e)])
+    _chunk_table_into_fields(embed, ['勝-敗', '番付', '姓氏(拼音)'], rows)
     embed.set_footer(text='資料來源：sumo-api.com（進行中的場所會即時反映目前戰況）')
     return embed
 
