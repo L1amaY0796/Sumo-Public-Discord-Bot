@@ -231,9 +231,10 @@ def _short_display(entry: dict) -> str:
     short_jp = name_jp.split('　')[0] or name_en
     return f'{short_jp}({name_en})'
 
-def _chunk_table_into_fields(embed: discord.Embed, headers: list[str], rows: list[list[str]]) -> None:
-    """把表格切成幾塊 code block 塞進 embed fields，每塊都重複表頭方便閱讀。"""
-    col_widths = [display_width(h) for h in headers]
+def _chunk_table_into_fields(embed: discord.Embed, headers: Optional[list[str]], rows: list[list[str]]) -> None:
+    """把表格切成幾塊 code block 塞進 embed fields；有給 headers 時每塊都重複表頭方便閱讀，headers=None 則不印表頭與分隔線。"""
+    col_count = len(headers) if headers else (len(rows[0]) if rows else 0)
+    col_widths = [display_width(h) for h in headers] if headers else [0] * col_count
     for row in rows:
         for i, cell in enumerate(row):
             col_widths[i] = max(col_widths[i], display_width(cell))
@@ -241,7 +242,7 @@ def _chunk_table_into_fields(embed: discord.Embed, headers: list[str], rows: lis
     def row_text(cells: list[str]) -> str:
         return '  '.join(pad_display(c, col_widths[i]) if i < len(cells) - 1 else c for i, c in enumerate(cells))
 
-    header_block = row_text(headers) + '\n' + '-' * (sum(col_widths) + 2 * (len(headers) - 1)) + '\n'
+    header_block = (row_text(headers) + '\n' + '-' * (sum(col_widths) + 2 * (len(headers) - 1)) + '\n') if headers else ''
     budget = TABLE_FIELD_BUDGET - len(header_block) - len('```\n\n```')
 
     def emit(lines: list[str]) -> None:
@@ -310,19 +311,15 @@ def build_matchup_embed(basho_id: str, day: int, torikumi: list, id_to_jp: dict)
         west_id = m.get('westId')
         east = {'shikonaJp': id_to_jp.get(east_id), 'shikonaEn': m.get('eastShikona')}
         west = {'shikonaJp': id_to_jp.get(west_id), 'shikonaEn': m.get('westShikona')}
-        pairing = f'{_short_display(east)} vs {_short_display(west)}'
         winner_id = m.get('winnerId')
-        kimarite = m.get('kimarite')
-        if not winner_id:
-            result = '⏳ 未開打'
-        elif winner_id == east_id:
-            result = f'東方勝{f"（{kimarite}）" if kimarite else ""}'
-        elif winner_id == west_id:
-            result = f'西方勝{f"（{kimarite}）" if kimarite else ""}'
-        else:
-            result = '?'
-        rows.append([str(m.get('matchNo', '?')), pairing, result])
-    _chunk_table_into_fields(embed, ['#', '力士1(姓氏/拼音) vs 力士2(姓氏/拼音)', '結果'], rows)
+        east_mark = west_mark = ''
+        if winner_id and winner_id == east_id:
+            east_mark, west_mark = ('🔵', '🔴')
+        elif winner_id and winner_id == west_id:
+            east_mark, west_mark = ('🔴', '🔵')
+        pairing = f'{east_mark}{_short_display(east)} vs {west_mark}{_short_display(west)}'
+        rows.append([str(m.get('matchNo', '?')), pairing])
+    _chunk_table_into_fields(embed, None, rows)
     embed.set_footer(text='資料來源：sumo-api.com（進行中的天次會即時反映目前戰況）')
     return embed
 
