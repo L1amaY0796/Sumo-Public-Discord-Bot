@@ -10,6 +10,7 @@ CACHE_TTL_MATCHES = 120
 CACHE_TTL_H2H = 180
 CACHE_TTL_BASHO = 300
 CACHE_TTL_BANZUKE = 120
+CACHE_TTL_TORIKUMI = 60
 
 class SumoAPIError(Exception):
     pass
@@ -124,3 +125,9 @@ class SumoAPI:
 
     async def get_banzuke(self, basho_id: str, division: str='Makuuchi') -> dict:
         return await self._get(f'/basho/{basho_id}/banzuke/{division}', ttl=CACHE_TTL_BANZUKE)
+
+    async def get_torikumi(self, basho_id: str, division: str='Makuuchi', day: int=1) -> list:
+        data = await self._get(f'/basho/{basho_id}/torikumi/{division}/{day}', ttl=CACHE_TTL_TORIKUMI)
+        if isinstance(data, dict):
+            return data.get('torikumi', []) or []
+        return data or []

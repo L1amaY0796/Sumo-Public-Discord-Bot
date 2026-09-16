@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -147,6 +148,36 @@ class RikishiCog(commands.Cog):
             )
             return
         embed = embeds.build_leaderboard_embed(basho_id, banzuke)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name='matchup', description='查詢指定場所某一天的對戰組合（含優勝決定戰）')
+    @app_commands.describe(day='第幾天，例如 4（優勝決定戰通常是 16）', basho='場所代碼，格式 YYYYMM，例如 202607（不填則自動抓目前或最近一次場所）')
+    async def matchup(self, interaction: discord.Interaction, day: int, basho: str | None=None):
+        await interaction.response.defer()
+        basho_id = basho.strip() if basho else current_basho_id()
+        if not (basho_id.isdigit() and len(basho_id) == 6):
+            await interaction.followup.send('⚠️ 場所代碼格式錯誤，請用 YYYYMM，例如 202607（2026年七月場所）。')
+            return
+        if day < 1:
+            await interaction.followup.send('⚠️ day 請填正整數，例如 4。')
+            return
+        try:
+            torikumi = await self.api.get_torikumi(basho_id, 'Makuuchi', day)
+        except SumoAPIError as e:
+            await interaction.followup.send(
+                f"⚠️ 查不到 {basho_display_name(basho_id)} 第 {day} 天的對戰組合：{e}\n{SUPPORT_CONTACT_MESSAGE}"
+            )
+            return
+        if not torikumi:
+            await interaction.followup.send(f'❌ 查不到 {basho_display_name(basho_id)} 第 {day} 天的對戰組合（可能尚未公布，或該天不存在）。')
+            return
+        ids = {m.get('eastId') for m in torikumi if m.get('eastId')} | {m.get('westId') for m in torikumi if m.get('westId')}
+        profiles = await asyncio.gather(*(self.api.get_rikishi(i) for i in ids), return_exceptions=True)
+        id_to_jp = {}
+        for rid, profile in zip(ids, profiles):
+            if isinstance(profile, dict) and profile.get('shikonaJp'):
+                id_to_jp[rid] = profile['shikonaJp']
+        embed = embeds.build_matchup_embed(basho_id, day, torikumi, id_to_jp)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name='guide', description='顯示所有指令的使用說明')

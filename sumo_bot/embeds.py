@@ -298,6 +298,34 @@ def build_leaderboard_embed(basho_id: str, banzuke: Optional[dict]) -> discord.E
     embed.set_footer(text='資料來源：sumo-api.com（進行中的場所會即時反映目前戰況）')
     return embed
 
+def build_matchup_embed(basho_id: str, day: int, torikumi: list, id_to_jp: dict) -> discord.Embed:
+    title_prefix = '🏆 優勝決定戰' if day > 15 else '⚔️ 對戰組合'
+    embed = discord.Embed(title=f'{title_prefix}　{basho_display_name(basho_id)} 第{day}天', color=BRAND_COLOR)
+    if not torikumi:
+        embed.description = '查不到這一天的對戰組合（可能尚未公布，或該天不存在）。'
+        return embed
+    rows = []
+    for m in sorted(torikumi, key=lambda x: x.get('matchNo', 0)):
+        east_id = m.get('eastId')
+        west_id = m.get('westId')
+        east = {'shikonaJp': id_to_jp.get(east_id), 'shikonaEn': m.get('eastShikona')}
+        west = {'shikonaJp': id_to_jp.get(west_id), 'shikonaEn': m.get('westShikona')}
+        pairing = f'{_short_display(east)} vs {_short_display(west)}'
+        winner_id = m.get('winnerId')
+        kimarite = m.get('kimarite')
+        if not winner_id:
+            result = '⏳ 未開打'
+        elif winner_id == east_id:
+            result = f'東方勝{f"（{kimarite}）" if kimarite else ""}'
+        elif winner_id == west_id:
+            result = f'西方勝{f"（{kimarite}）" if kimarite else ""}'
+        else:
+            result = '?'
+        rows.append([str(m.get('matchNo', '?')), pairing, result])
+    _chunk_table_into_fields(embed, ['#', '力士1(姓氏/拼音) vs 力士2(姓氏/拼音)', '結果'], rows)
+    embed.set_footer(text='資料來源：sumo-api.com（進行中的天次會即時反映目前戰況）')
+    return embed
+
 def build_guide_embed() -> discord.Embed:
     embed = discord.Embed(title='📖 Sumo Bot 使用說明', description='查詢大相撲力士資料與場所結果，支援日文漢字、羅馬拼音、常見繁中翻譯名。', color=BRAND_COLOR)
     embed.add_field(name='🔍 /rikishi', value='查詢單一力士完整資料（年齡、出身、部屋、番付、最高位、身體數據、生涯戰績、優勝與三賞次數）\n`name`：力士名稱（必填）\n範例：`/rikishi name:Onosato`', inline=False)
@@ -306,6 +334,7 @@ def build_guide_embed() -> discord.Embed:
     embed.add_field(name='🔍 /basho', value='查詢場所結果（各級優勝、三賞）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/basho basho:202605`', inline=False)
     embed.add_field(name='🔍 /rank', value='查詢該場所幕內力士當前位階（橫綱、大關⋯由高到低排列，含東西方）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/rank basho:202607`', inline=False)
     embed.add_field(name='🔍 /leaderboard', value='查詢該場所幕內力士目前總戰績（W 勝 - L 敗），依勝場數排序\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/leaderboard basho:202607`', inline=False)
+    embed.add_field(name='🔍 /matchup', value='查詢指定場所某一天的對戰組合（若當屆場所打到優勝決定戰，通常會出現在第 16 天）\n`day`：第幾天（必填）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/matchup day:4 basho:202609`', inline=False)
     embed.add_field(name='🗨️ 名稱查詢小技巧', value='支援大小寫不拘的力士羅馬拼音名，如有四股名同姓情形，建議使用全名。支援的日文漢字與繁中搜尋，如 Onosato 寫作`大の里`、`大之里`持續更新中，可查閱 Github 的 json 檔，如想完善也歡迎向作者反應。', inline=False)
     embed.add_field(name='🗨️ 感謝', value='若想支持，本機器人基於`sumo-api.com`的免費 api 運作，可以支持他們。', inline= False)
     embed.set_footer(text='資料來源：sumo-api.com')
