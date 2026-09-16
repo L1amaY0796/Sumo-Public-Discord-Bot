@@ -30,6 +30,18 @@ def build_rikishi_embed(rikishi: dict, stats: Optional[dict]) -> discord.Embed:
     age = calc_age(rikishi.get('birthDate'))
     current_rank = rikishi.get('currentRank')
     embed.add_field(name='目前番付', value=f'{translate_rank(current_rank)}（{current_rank}）' if current_rank else '不明', inline=True)
+    ranks_full = rikishi.get('rankHistory') or rikishi.get('ranks') or []
+    ranked_with_value = [r for r in ranks_full if r.get('rankValue') is not None]
+    if ranked_with_value:
+        best = min(ranked_with_value, key=lambda r: r['rankValue'])
+        best_rank = best.get('rank')
+        best_value = best.get('rankValue')
+        same_value_bashos = [r.get('bashoId') for r in ranked_with_value if r.get('rankValue') == best_value and r.get('bashoId')]
+        first_basho = min(same_value_bashos) if same_value_bashos else best.get('bashoId')
+        value = f'{translate_rank(best_rank)}（{best_rank}）'
+        if first_basho:
+            value += f'\n（{basho_display_name(str(first_basho))} 首次達成）'
+        embed.add_field(name='最高位', value=value, inline=True)
     embed.add_field(name='年齡', value=f'{age} 歲' if age is not None else '不明', inline=True)
     embed.add_field(name='所屬部屋', value=rikishi.get('heya') or '不明', inline=True)
     embed.add_field(name='出身地', value=rikishi.get('shusshin') or '不明', inline=True)
@@ -38,9 +50,8 @@ def build_rikishi_embed(rikishi: dict, stats: Optional[dict]) -> discord.Embed:
     embed.add_field(name='身體數據', value=f'{height} cm / {weight} kg' if height and weight else '不明', inline=True)
     debut = rikishi.get('debut')
     embed.add_field(name='初土俵', value=basho_display_name(debut) if debut else '不明', inline=True)
-    ranks = rikishi.get('rankHistory') or rikishi.get('ranks')
-    if ranks:
-        recent = ranks[:5] if isinstance(ranks, list) else []
+    if ranks_full:
+        recent = ranks_full[:5] if isinstance(ranks_full, list) else []
         lines = []
         for r in recent:
             bid = r.get('bashoId', '?')
@@ -289,7 +300,7 @@ def build_leaderboard_embed(basho_id: str, banzuke: Optional[dict]) -> discord.E
 
 def build_guide_embed() -> discord.Embed:
     embed = discord.Embed(title='📖 Sumo Bot 使用說明', description='查詢大相撲力士資料與場所結果，支援日文漢字、羅馬拼音、常見繁中翻譯名。', color=BRAND_COLOR)
-    embed.add_field(name='🔍 /rikishi', value='查詢單一力士完整資料（年齡、出身、部屋、番付、身體數據、生涯戰績、優勝與三賞次數）\n`name`：力士名稱（必填）\n範例：`/rikishi name:Onosato`', inline=False)
+    embed.add_field(name='🔍 /rikishi', value='查詢單一力士完整資料（年齡、出身、部屋、番付、最高位、身體數據、生涯戰績、優勝與三賞次數）\n`name`：力士名稱（必填）\n範例：`/rikishi name:Onosato`', inline=False)
     embed.add_field(name='🔍 /record', value='查詢力士單一場所的逐日戰績\n`name`：力士名稱（必填）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/record name:Hoshoryu basho:202607`', inline=False)
     embed.add_field(name='🔍 /h2h', value='查詢兩位力士的對戰紀錄與勝負統計\n`name1`、`name2`：兩位力士名稱（皆必填）\n範例：`/h2h name1:Aonishiki name2:Hoshoryu`', inline=False)
     embed.add_field(name='🔍 /basho', value='查詢場所結果（各級優勝、三賞）\n`basho`：場所代碼 YYYYMM（選填，不填則抓目前/最近一次場所）\n範例：`/basho basho:202605`', inline=False)

@@ -30,7 +30,7 @@ class RikishiCog(commands.Cog):
             return None
         return rikishi
 
-    @app_commands.command(name='rikishi', description='查詢單一力士的完整資料（年齡、出身、部屋、番付、身體數據等）')
+    @app_commands.command(name='rikishi', description='查詢單一力士的完整資料（年齡、出身、部屋、番付、最高位、身體數據等）')
     @app_commands.describe(name='力士名稱（可用日文原名、羅馬拼音或繁中翻譯名）')
     async def rikishi(self, interaction: discord.Interaction, name: str):
         await interaction.response.defer()
