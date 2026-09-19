@@ -66,7 +66,15 @@ class RikishiCog(commands.Cog):
         except SumoAPIError as e:
             await interaction.followup.send(f'⚠️ 取得戰績時發生錯誤：{e}')
             return
-        embed = embeds.build_record_embed(rikishi_data, basho_id, matches)
+        opponent_ids = {m.get('eastId') if m.get('eastId') != rikishi_id else m.get('westId') for m in matches}
+        opponent_ids.discard(None)
+        opponent_ids.discard(rikishi_id)
+        profiles = await asyncio.gather(*(self.api.get_rikishi(i) for i in opponent_ids), return_exceptions=True)
+        id_to_jp = {}
+        for rid, profile in zip(opponent_ids, profiles):
+            if isinstance(profile, dict) and profile.get('shikonaJp'):
+                id_to_jp[rid] = profile['shikonaJp']
+        embed = embeds.build_record_embed(rikishi_data, basho_id, matches, id_to_jp)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name='h2h', description='查詢兩位力士的對戰紀錄（例如兩位橫綱之間的交手成績）')

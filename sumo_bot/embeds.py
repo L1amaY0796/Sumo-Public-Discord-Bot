@@ -79,9 +79,10 @@ def build_rikishi_embed(rikishi: dict, stats: Optional[dict]) -> discord.Embed:
     embed.set_footer(text='資料來源：sumo-api.com')
     return embed
 
-def build_record_embed(rikishi: dict, basho_id: str, matches: list) -> discord.Embed:
+def build_record_embed(rikishi: dict, basho_id: str, matches: list, id_to_jp: Optional[dict]=None) -> discord.Embed:
     name = _display_name(rikishi)
     rikishi_id = rikishi.get('id')
+    id_to_jp = id_to_jp or {}
     embed = discord.Embed(title=f'📋 {name} — {basho_display_name(basho_id)} 戰績', color=BRAND_COLOR)
     if not matches:
         embed.description = '目前查不到這個場所的比賽紀錄（可能場所尚未開始，或該力士這場所沒有出場）。'
@@ -92,7 +93,8 @@ def build_record_embed(rikishi: dict, basho_id: str, matches: list) -> discord.E
     for m in matches_sorted:
         result, opponent = _match_result_for(m, rikishi_id)
         day = m.get('day', '?')
-        opp_name = (opponent or {}).get('shikonaEn') or '?'
+        opp_id = (opponent or {}).get('id')
+        opp_name = id_to_jp.get(opp_id) or (opponent or {}).get('shikonaEn') or '?'
         kimarite = m.get('kimarite') or ''
         if result == 'win':
             wins += 1
