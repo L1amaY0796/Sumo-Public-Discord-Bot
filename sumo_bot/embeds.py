@@ -94,7 +94,8 @@ def build_record_embed(rikishi: dict, basho_id: str, matches: list, id_to_jp: Op
         result, opponent = _match_result_for(m, rikishi_id)
         day = m.get('day', '?')
         opp_id = (opponent or {}).get('id')
-        opp_name = id_to_jp.get(opp_id) or (opponent or {}).get('shikonaEn') or '?'
+        opp_jp = id_to_jp.get(opp_id)
+        opp_name = opp_jp.split('　')[0] if opp_jp else (opponent or {}).get('shikonaEn') or '?'
         kimarite = m.get('kimarite') or ''
         if result == 'win':
             wins += 1
